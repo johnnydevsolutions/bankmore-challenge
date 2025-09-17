@@ -10,6 +10,8 @@ namespace Transferencia.Api.Controllers;
 
 [ApiController]
 [Route("transferencias")]
+[Produces("application/json")]
+[Consumes("application/json")]
 public class TransferenciasController : ControllerBase
 {
     private readonly ContaRepository _contas;

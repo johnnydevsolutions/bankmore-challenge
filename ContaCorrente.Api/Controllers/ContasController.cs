@@ -13,6 +13,8 @@ namespace ContaCorrente.Api.Controllers;
 
 [ApiController]
 [Route("contas")]
+[Produces("application/json")]
+[Consumes("application/json")]
 public class ContasController : ControllerBase
 {
     private readonly ContaRepository _contas;
