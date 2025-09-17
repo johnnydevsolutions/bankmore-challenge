@@ -60,7 +60,7 @@ public class TransferenciasController : ControllerBase
         }
 
         // Crédito destino (envia NumeroConta)
-        var creditoPayload = JsonSerializer.Serialize(new { Idempotencia = req.Idempotencia + ":C", NumeroConta = req.NumeroContaDestino, Valor = Math.Round(req.Valor, 2), Tipo = 'C' });
+        var creditoPayload = JsonSerializer.Serialize(new { Idempotencia = req.Idempotencia + ":C", ContaId = destino.Id, NumeroConta = (long?)null, Valor = Math.Round(req.Valor, 2), Tipo = 'C' });
         var respCredito = await http.PostAsync("/contas/movimentar", new StringContent(creditoPayload, System.Text.Encoding.UTF8, "application/json"));
         if (!respCredito.IsSuccessStatusCode)
         {

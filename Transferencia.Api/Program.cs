@@ -27,6 +27,7 @@ builder.Services.AddControllers(options =>
 {
     options.OutputFormatters.RemoveType<Microsoft.AspNetCore.Mvc.Formatters.StringOutputFormatter>();
 });
+builder.Services.AddHealthChecks();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -55,6 +56,8 @@ builder.Services.AddSwaggerGen(c =>
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "dev-secret-key-change";
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
+var issuer = builder.Configuration["Jwt:Issuer"] ?? "bankmore.local";
+var audience = builder.Configuration["Jwt:Audience"] ?? "bankmore.clients";
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -63,10 +66,12 @@ builder.Services.AddAuthentication(options =>
 {
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = false,
-        ValidateAudience = false,
+        ValidateIssuer = true,
+        ValidateAudience = true,
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
+        ValidIssuer = issuer,
+        ValidAudience = audience,
         ClockSkew = TimeSpan.Zero
     };
 });
@@ -83,6 +88,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Health/ready endpoints
+app.MapHealthChecks("/health");
+app.MapGet("/ready", () => Results.Ok(new { status = "ready" }));
 
 app.Run();
 

@@ -103,7 +103,7 @@ public class ContasController : ControllerBase
         return NoContent();
     }
 
-    public record MovimentarRequest(string Idempotencia, long? NumeroConta, decimal Valor, char Tipo);
+    public record MovimentarRequest(string Idempotencia, long? NumeroConta, string? ContaId, decimal Valor, char Tipo);
     [Authorize]
     /// <summary>Crédito/Débito na conta</summary>
     [HttpPost("movimentar")]
@@ -119,6 +119,14 @@ public class ContasController : ControllerBase
         if (req.Tipo != 'C' && req.Tipo != 'D') return BadRequest(new { type = "INVALID_TYPE", message = "Tipo inválido" });
 
         Conta contaMov = contaLogada;
+        // Preferir direcionamento por ContaId para evitar trânsito de número entre serviços
+        if (!string.IsNullOrWhiteSpace(req.ContaId))
+        {
+            if (req.Tipo != 'C') return BadRequest(new { type = "INVALID_TYPE", message = "Apenas crǸdito permitido para terceiros" });
+            var outraById = await _contas.GetByIdAsync(req.ContaId);
+            if (outraById is null) return BadRequest(new { type = "INVALID_ACCOUNT", message = "Conta inexistente" });
+            contaMov = outraById;
+        }
         if (req.NumeroConta.HasValue && req.NumeroConta.Value != contaLogada.Numero)
         {
             if (req.Tipo != 'C') return BadRequest(new { type = "INVALID_TYPE", message = "Apenas crédito permitido para terceiros" });
@@ -200,13 +208,18 @@ public class ContasController : ControllerBase
     private static (string hash, string salt) HashSenha(string value)
     {
         var saltBytes = RandomNumberGenerator.GetBytes(16);
-        var salt = Convert.ToBase64String(saltBytes);
-        var hash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(value + salt)));
-        return (hash, salt);
+        using var pbkdf2 = new Rfc2898DeriveBytes(value, saltBytes, 100_000, HashAlgorithmName.SHA256);
+        var hashBytes = pbkdf2.GetBytes(32);
+        return (Convert.ToBase64String(hashBytes), Convert.ToBase64String(saltBytes));
     }
 
     private static bool VerificaSenha(string input, string salt, string hash)
-        => Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(input + salt))) == hash;
+    {
+        var saltBytes = Convert.FromBase64String(salt);
+        using var pbkdf2 = new Rfc2898DeriveBytes(input, saltBytes, 100_000, HashAlgorithmName.SHA256);
+        var computed = pbkdf2.GetBytes(32);
+        return Convert.ToBase64String(computed) == hash;
+    }
 
     private static string Sha256Base64(string value)
         => Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
@@ -227,7 +240,11 @@ public class ContasController : ControllerBase
             new Claim(ClaimTypes.NameIdentifier, conta.Id),
             new Claim("numero", conta.Numero.ToString())
         };
+        var issuer = _cfg["Jwt:Issuer"] ?? "bankmore.local";
+        var audience = _cfg["Jwt:Audience"] ?? "bankmore.clients";
         var token = new JwtSecurityToken(
+            issuer: issuer,
+            audience: audience,
             claims: claims,
             expires: DateTime.UtcNow.AddHours(1),
             signingCredentials: creds);

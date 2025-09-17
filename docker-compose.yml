@@ -11,6 +11,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - CONTA_API_URL=http://conta:8080
       - Jwt__Key=G6v6b2K3Zr8tH1N2q5X9Y3p7U2w4A6c8D0f2H4j6L8n0Q2s4V6x8Z0b2D4F6H8J
+      - Jwt__Issuer=bankmore.local
+      - Jwt__Audience=bankmore.clients
     volumes:
       - conta_data:/app/data
 
@@ -25,6 +27,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - CONTA_API_URL=http://conta:8080
       - Jwt__Key=G6v6b2K3Zr8tH1N2q5X9Y3p7U2w4A6c8D0f2H4j6L8n0Q2s4V6x8Z0b2D4F6H8J
+      - Jwt__Issuer=bankmore.local
+      - Jwt__Audience=bankmore.clients
     volumes:
       - conta_data:/app/data
 
