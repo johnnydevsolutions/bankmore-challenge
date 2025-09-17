@@ -1,63 +1,90 @@
-# Banco Digital da Ana – Implementação do Teste
+# Banco Digital da Ana — Implementação do Teste
 
-Este repositório contém uma implementação funcional mínima dos requisitos principais:
+Este repositório contém uma implementação funcional mínima dos requisitos principais do desafio, focada em rodar localmente via Docker Compose, sem custos.
 
 - API Conta Corrente (ASP.NET Core 8)
-  - Cadastrar conta: valida CPF, cria conta ativa e retorna número
-  - Login: emite JWT (usa número da conta)
-  - Inativar: exige token e senha
-  - Movimentar: crédito/débito com validações e idempotência simplificada
-  - Saldo: retorna saldo calculado (créditos – débitos)
-
+  - Cadastrar conta, Login (JWT), Inativar, Movimentar (crédito/débito com idempotência), Saldo.
 - API Transferência (ASP.NET Core 8)
-  - Transferir entre contas da mesma instituição (débito origem, crédito destino, estorno em falha)
-
-- Persistência: SQLite + Dapper. Schema criado automaticamente ao subir.
-
-- Segurança: JWT; senha e CPF são armazenados como hash + salt (CPF apenas para cumprir autenticação por documento no cadastro; login atual usa número da conta).
-
-- Padrões: DDD (camada Domain/Infrastructure), CQRS (via MediatR – estrutura pronta), Swagger habilitado em Development.
-
-Observações de escopo/teste:
-- Idempotência: placeholder simplificado (tabela criada, uso mínimo nos endpoints).
-- Transferência chama diretamente a mesma base (para evitar custos/infra); em produção, a orquestração deveria usar chamadas HTTP para a API de Conta.
-- Kafka: serviços no docker-compose como placeholder; integração de tarifas é opcional e não implementada para manter custos zero.
+  - Transferência entre contas (débito origem, crédito destino, estorno em falha) com idempotência.
+- Persistência: SQLite + Dapper (schema criado automaticamente).
+- Segurança: JWT (HS256) com chave forte, issuer/audience validados; senhas com PBKDF2 (Rfc2898, 100k iterações). CPF não é armazenado em claro (índice hash para lookup).
+- Swagger com botão Authorize (Bearer), respostas/requests padronizados em JSON.
+- Health endpoints: `/health` e `/ready` em ambas as APIs.
 
 ## Como rodar com Docker
 
-Requisitos: Docker/Docker Compose
+Pré‑requisitos: Docker/Docker Compose
 
-1. `docker compose build`
-2. `docker compose up -d`
+1. `docker compose up -d --build`
+2. Acesse:
+   - ContaCorrente API: `http://localhost:8081/swagger`
+   - Transferência API: `http://localhost:8082/swagger`
 
-Serviços:
-- ContaCorrente API: `http://localhost:8081/swagger`
-- Transferência API: `http://localhost:8082/swagger`
+Variáveis já definidas no `docker-compose.yml`:
+- `Jwt__Key` (64 chars), `Jwt__Issuer=bankmore.local`, `Jwt__Audience=bankmore.clients`
+- `CONTA_API_URL=http://conta:8080` (base usada pela Transferência API para chamar a Conta API)
 
 O banco SQLite fica em um volume Docker (`conta_data`).
 
-## Fluxo básico
+## Fluxo de testes (copiável)
 
-1. Cadastrar conta: POST `/contas/cadastrar` body `{ cpf, nome, senha }`
-2. Login: POST `/contas/login` body `{ documentoOuNumero, senha }` (usar o número gerado no cadastro)
-3. Usar o token Bearer nos demais endpoints (`Authorization: Bearer <token>`)
-4. Movimentar: POST `/contas/movimentar` body `{ idempotencia, numeroConta?, valor, tipo }`
-5. Saldo: GET `/contas/saldo`
-6. Transferir: POST `/transferencias` body `{ idempotencia, numeroContaDestino, valor }`
+1. Cadastrar Conta A — POST `/contas/cadastrar`
+   {
+     "Cpf": "123.456.789-09",
+     "Nome": "Cliente A",
+     "Senha": "senhaA@123"
+   }
+   → Guarde o "Numero" (ex.: 1000000001).
 
-## Desenvolvimento local
+2. Cadastrar Conta B — POST `/contas/cadastrar`
+   {
+     "Cpf": "987.654.321-00",
+     "Nome": "Cliente B",
+     "Senha": "senhaB@123"
+   }
+   → Guarde o "Numero" (ex.: 1000000002).
 
-Requisitos: .NET 8 SDK
+3. Login (Conta A) — POST `/contas/login`
+   {
+     "DocumentoOuNumero": "1000000001",
+     "Senha": "senhaA@123"
+   }
+   → Copie o Token e clique em "Authorize" no Swagger (cole apenas o token, sem escrever "Bearer ").
 
+4. Crédito na A — POST `/contas/movimentar` (autenticado)
+   {
+     "Idempotencia": "credA-001",
+     "NumeroConta": null,
+     "ContaId": null,
+     "Valor": 500.00,
+     "Tipo": "C"
+   }
+   → Esperado: 204 No Content. Se reutilizar a mesma `Idempotencia`, também retorna 204, sem duplicar.
+
+5. Saldo A — GET `/contas/saldo` (autenticado)
+
+6. Transferência A→B — POST `http://localhost:8082/transferencias` (autenticado com token da A)
+   {
+     "Idempotencia": "transf-001",
+     "NumeroContaDestino": 1000000002,
+     "Valor": 125.50
+   }
+   → Esperado: 204. Internamente, a API de Transferência resolve `ContaId` e chama a Conta API sem trafegar número de conta.
+
+7. Saldo B — Login na B e GET `/contas/saldo` (token da B).
+
+Notas:
+- Sempre use `Content-Type: application/json`. Após login, o botão Authorize envia o Bearer automaticamente em endpoints protegidos.
+- Erros comuns: reutilizar `Idempotencia` (a operação é ignorada) ou usar token expirado (401/403).
+
+## Desenvolvimento local (sem Docker)
+
+Pré‑requisito: .NET 8 SDK
 - Build: `dotnet build BancoAna.sln`
 - Testes: `dotnet test Tests/Tests.csproj`
 - Rodar APIs: `dotnet run --project ContaCorrente.Api` e `dotnet run --project Transferencia.Api`
 
 ## Próximos passos sugeridos
-
-- Completar idempotência persistida em todos os comandos
-- Login por CPF (usando hash + salt, sem armazenar o CPF puro)
-- Documentar esquemas/erros detalhados no Swagger (exemplos)
-- Separar bancos por serviço e comunicação por HTTP entre as APIs
-- Implementar Kafka (KafkaFlow) para tarifa opcional
-
+- Logs estruturados/métricas/tracing
+- Testes adicionais (idempotência repetida; cenários de falha na transferência)
+- Kafka (eventos de movimentação/transferência) e módulo de Tarifas (opcional no desafio)
