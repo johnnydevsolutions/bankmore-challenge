@@ -1,0 +1,53 @@
+version: '3.8'
+services:
+  conta:
+    build:
+      context: .
+      dockerfile: ContaCorrente.Api/Dockerfile
+    container_name: conta-api
+    ports:
+      - "8081:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    volumes:
+      - conta_data:/app/data
+    environment:
+      - CONTA_API_URL=http://conta:8080
+
+  transferencia:
+    build:
+      context: .
+      dockerfile: Transferencia.Api/Dockerfile
+    container_name: transferencia-api
+    ports:
+      - "8082:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    volumes:
+      - conta_data:/app/data
+    environment:
+      - CONTA_API_URL=http://conta:8080
+
+  zookeeper:
+    image: bitnami/zookeeper:3.9
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: bitnami/kafka:3.7
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_ENABLE_KRAFT=no
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,PLAINTEXT_HOST://:29092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+    depends_on:
+      - zookeeper
+
+volumes:
+  conta_data:
