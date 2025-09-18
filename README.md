@@ -88,3 +88,8 @@ Pré‑requisito: .NET 8 SDK
 - Logs estruturados/métricas/tracing
 - Testes adicionais (idempotência repetida; cenários de falha na transferência)
 - Kafka (eventos de movimentação/transferência) e módulo de Tarifas (opcional no desafio)
+
+## Licença
+
+Este repositório é disponibilizado exclusivamente para avaliação técnica.
+Veja o arquivo `LICENSE` para os termos completos (Evaluation License — All Rights Reserved).
